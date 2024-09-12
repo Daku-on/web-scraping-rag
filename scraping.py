@@ -3,7 +3,6 @@ import csv
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
-import re
 
 visited_urls = set()  # 訪問済みのURLを保存するセット
 robots_cache = {}  # robots.txtをキャッシュして再利用
@@ -110,40 +109,45 @@ def scrape_links(url: str) -> list:
         return []
 
 
-def save_urls_to_csv(url_list: list, output_csv: str) -> None:
+def save_urls_to_csv(url_depth_list: list, output_csv: str) -> None:
     """
     取得したURLリストをCSVファイルに保存します。
     
     Args:
-    - url_list (list): 保存するURLのリスト
+    - url_depth_list (list): 保存するURLと深さのタプルのリスト
     - output_csv (str): 保存するCSVファイルのパス
     """
     with open(output_csv, mode="w", newline="", encoding="utf-8") as file:
         writer = csv.writer(file)
-        writer.writerow(["URL"])  # CSVのヘッダー行
-        for url in url_list:
-            writer.writerow([url])
+        writer.writerow(["URL", "Depth"])  # CSVのヘッダー行
+        for url, depth in url_depth_list:
+            writer.writerow([url, depth])
     
-    print(f"{len(url_list)}個のURLが {output_csv} に保存されました。")
+    print(f"{len(url_depth_list)}個のURLが {output_csv} に保存されました。")
 
 
-def crawl_site(url: str, depth: int) -> None:
+def crawl_site(url: str, depth: int, current_depth: int = 0, url_depth_list: list = []) -> None:
     """
     指定されたURLから再帰的にリンクをたどり、すべてのURLを収集します。
     
     Args:
     - url (str): 開始するページのURL
     - depth (int): 再帰的にたどる深さ（0の場合はリンクをたどらない）
+    - current_depth (int): 現在の深さ
+    - url_depth_list (list): URLと深さを保存するリスト
     """
     if url in visited_urls:
         return
-    if depth == 0:
+    if current_depth > depth:
         return
     
-    print(f"現在のURL: {url}")
+    print(f"現在のURL: {url}, 深さ: {current_depth}")
     
     # 訪問済みURLに追加
     visited_urls.add(url)
+
+    # URLと深さをリストに追加
+    url_depth_list.append((url, current_depth))
 
     # robots.txtを確認
     robots_txt = fetch_robots_txt(url)
@@ -157,19 +161,22 @@ def crawl_site(url: str, depth: int) -> None:
     # 再帰的にリンクをたどる
     for link in links:
         if link not in visited_urls:
-            crawl_site(link, depth - 1)  # 深さを減らしながら再帰
+            crawl_site(link, depth, current_depth + 1, url_depth_list)
 
 
 def main():
     target_url = "https://www.nta.go.jp/users/gensen/nencho/index.htm"
-    output_csv = "scraped_urls.csv"
+    output_csv = "scraped_urls_with_depth.csv"
     crawl_depth = 2  # 再帰的にたどる深さを設定
 
+    # URLと深さを保存するリスト
+    url_depth_list = []
+
     # 再帰的にスクレイピングを開始
-    crawl_site(target_url, crawl_depth)
+    crawl_site(target_url, crawl_depth, current_depth=0, url_depth_list=url_depth_list)
     
-    # 取得したすべてのURLをCSVに保存
-    save_urls_to_csv(list(visited_urls), output_csv)
+    # 取得したすべてのURLと深さをCSVに保存
+    save_urls_to_csv(url_depth_list, output_csv)
 
 
 if __name__ == "__main__":
